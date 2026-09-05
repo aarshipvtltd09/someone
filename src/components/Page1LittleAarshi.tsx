@@ -12,8 +12,8 @@ const DEFAULT_TODAY_PHOTO = '/today_aarshi.jpg';
 const STORAGE_KEY_CHILDHOOD = 'aarshi_real_childhood_photo';
 const STORAGE_KEY_TODAY = 'aarshi_real_today_photo';
 
-// Helper to safely compress high-res phone camera photos before saving to localStorage
-const compressImage = (file: File, maxWidth = 900, maxHeight = 1200, quality = 0.85): Promise<string> => {
+// Helper to safely preserve high-res phone camera photos before saving to localStorage
+const compressImage = (file: File, maxWidth = 1600, maxHeight = 2000, quality = 0.92): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -81,30 +81,54 @@ export const Page1LittleAarshi: React.FC<Page1Props> = ({ onContinue }) => {
 
   const handlePhotoUpload = async (file: File, type: 'childhood' | 'today') => {
     try {
-      const compressedDataUrl = await compressImage(file);
-      if (type === 'childhood') {
-        setChildhoodPhoto(compressedDataUrl);
-        setChildhoodImgError(false);
-        try {
-          localStorage.setItem(STORAGE_KEY_CHILDHOOD, compressedDataUrl);
-        } catch {
-          // ignore quota
+      // Read raw file as Data URL without any alteration or quality loss
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const rawDataUrl = event.target?.result as string;
+        if (!rawDataUrl) return;
+
+        if (type === 'childhood') {
+          setChildhoodPhoto(rawDataUrl);
+          setChildhoodImgError(false);
+          try {
+            localStorage.setItem(STORAGE_KEY_CHILDHOOD, rawDataUrl);
+          } catch {
+            // ignore quota
+          }
+          setSavedSuccessMessage('✅ Bachpan ki Asli Photo Main Files me save ho gayi! 🌸');
+        } else {
+          setTodayPhoto(rawDataUrl);
+          setTodayImgError(false);
+          try {
+            localStorage.setItem(STORAGE_KEY_TODAY, rawDataUrl);
+          } catch {
+            // ignore quota
+          }
+          setSavedSuccessMessage('✅ Aaj ki Asli Photo Main Files me save ho gayi! ✨');
         }
-        setSavedSuccessMessage('Choti Aarshi ki photo save ho gayi! 🌸');
-      } else {
-        setTodayPhoto(compressedDataUrl);
-        setTodayImgError(false);
+
+        // Send to backend API to write permanently into public/ directory
         try {
-          localStorage.setItem(STORAGE_KEY_TODAY, compressedDataUrl);
-        } catch {
-          // ignore quota
+          const res = await fetch('/api/upload-photo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, imageBase64: rawDataUrl })
+          });
+          const result = await res.json();
+          if (result.success) {
+            console.log('Server file updated permanently:', result);
+          }
+        } catch (apiErr) {
+          console.error('Failed to write to server file:', apiErr);
         }
-        setSavedSuccessMessage('Aaj Ki Aarshi ki photo save ho gayi! ✨');
-      }
-      audioManager.playSparkle();
-      setTimeout(() => setSavedSuccessMessage(null), 3000);
-    } catch {
-      // fallback
+
+        audioManager.playSparkle();
+        setTimeout(() => setSavedSuccessMessage(null), 4000);
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error uploading photo:', err);
     }
   };
 
@@ -180,6 +204,7 @@ export const Page1LittleAarshi: React.FC<Page1Props> = ({ onContinue }) => {
             <div className="absolute -bottom-3 -right-3 w-8 h-8 border-b-2 border-r-2 border-[#FFD166] rounded-br-lg pointer-events-none" />
             
             <div 
+              onClick={() => childhoodInputRef.current?.click()}
               onDragOver={(e) => { e.preventDefault(); setIsDraggingChildhood(true); }}
               onDragLeave={() => setIsDraggingChildhood(false)}
               onDrop={(e) => {
@@ -190,10 +215,10 @@ export const Page1LittleAarshi: React.FC<Page1Props> = ({ onContinue }) => {
                   handlePhotoUpload(file, 'childhood');
                 }
               }}
-              className={`relative w-48 h-56 sm:w-56 sm:h-64 rounded-2xl overflow-hidden bg-gradient-to-b from-[#241544] via-[#1a0f30] to-[#0c0717] flex items-center justify-center border transition-all duration-300 shadow-2xl ${
+              className={`relative w-48 h-56 sm:w-56 sm:h-64 rounded-2xl overflow-hidden bg-gradient-to-b from-[#241544] via-[#1a0f30] to-[#0c0717] flex items-center justify-center border transition-all duration-300 shadow-2xl cursor-pointer ${
                 isDraggingChildhood 
                   ? 'border-[#FFD166] ring-4 ring-[#FFD166]/30 scale-102' 
-                  : 'border-[#FFC8DD]/30'
+                  : 'border-[#FFC8DD]/30 hover:border-[#FFD166]'
               }`}
             >
               {childhoodPhoto && !childhoodImgError ? (
@@ -318,6 +343,7 @@ export const Page1LittleAarshi: React.FC<Page1Props> = ({ onContinue }) => {
             <div className="absolute -bottom-3 -left-3 w-8 h-8 border-b-2 border-l-2 border-[#CDB4FF] rounded-bl-lg pointer-events-none" />
 
             <div 
+              onClick={() => todayInputRef.current?.click()}
               onDragOver={(e) => { e.preventDefault(); setIsDraggingToday(true); }}
               onDragLeave={() => setIsDraggingToday(false)}
               onDrop={(e) => {
@@ -328,10 +354,10 @@ export const Page1LittleAarshi: React.FC<Page1Props> = ({ onContinue }) => {
                   handlePhotoUpload(file, 'today');
                 }
               }}
-              className={`relative w-48 h-56 sm:w-56 sm:h-64 rounded-2xl overflow-hidden bg-gradient-to-b from-[#1b1233] via-[#2a1340] to-[#120a22] flex items-center justify-center border transition-all duration-300 shadow-2xl ${
+              className={`relative w-48 h-56 sm:w-56 sm:h-64 rounded-2xl overflow-hidden bg-gradient-to-b from-[#1b1233] via-[#2a1340] to-[#120a22] flex items-center justify-center border transition-all duration-300 shadow-2xl cursor-pointer ${
                 isDraggingToday 
                   ? 'border-[#FFD166] ring-4 ring-[#FFD166]/30 scale-102' 
-                  : 'border-[#CDB4FF]/30'
+                  : 'border-[#CDB4FF]/30 hover:border-[#FFD166]'
               }`}
             >
               {todayPhoto && !todayImgError ? (
